@@ -1,92 +1,55 @@
 package com.tek.cmf.server;
 
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.nio.ByteBuffer;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
-import javax.imageio.ImageIO;
+import com.tek.cmf.packets.PacketDecoder;
+import com.tek.cmf.packets.PacketEncoder;
 
-import com.tek.cmf.capture.Camera;
-import com.tek.cmf.exceptions.UninitializedException;
-import com.tek.cmf.logging.Logger;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 public class Server {
 	
-	private ServerSocket serverSocket;
-	private ExecutorService clientHandler;
-	
-	public void start(int port) throws IOException {
-		clientHandler = Executors.newFixedThreadPool(4);
+	public void start(int port) throws IOException, InterruptedException {
+		EventLoopGroup bossGroup = new NioEventLoopGroup();
+		EventLoopGroup workerGroup = new NioEventLoopGroup();
 		
-		serverSocket = new ServerSocket(port);
+		ServerBootstrap sb = new ServerBootstrap();
 		
-		Logger.info(String.format("Bound server to port %d", port));
+		sb.group(bossGroup, workerGroup)
+			.channel(NioServerSocketChannel.class)
+			.childHandler(new ChannelInitializer<SocketChannel>() {
+				@Override
+				protected void initChannel(SocketChannel ch) throws Exception {
+					ch.pipeline().addLast(new PacketDecoder(),
+							new PacketEncoder(),
+							new ServerInboundHandler());
+				}
+			}).childOption(ChannelOption.SO_KEEPALIVE, true)
+			.option(ChannelOption.SO_BACKLOG, 128);
 		
-		while(true) {
-			Socket clientSocket = serverSocket.accept();
-			String ip = (((InetSocketAddress) clientSocket.getRemoteSocketAddress()).getAddress()).toString().replace("/","");
+		try {
+			ChannelFuture future = sb.bind(port).sync();
 			
-			clientHandler.execute(() -> {
+			new Thread(() -> {
 				try {
-					Logger.info(String.format("Connection from %s opened", ip));
-					
-					OutputStream outputStream = clientSocket.getOutputStream();
-					
-					BufferedImage testFrame = Camera.captureImage();
-					outputStream.write(ByteBuffer.allocate(4).putInt(getImageData(testFrame).length).array());
-					
-					long deltaFramerate = 1000 / Camera.getFramerate();
-					
-					while(clientSocket.isConnected()) {
-						long preImage = System.currentTimeMillis();
-						
-						BufferedImage frame = Camera.captureImage();
-						byte[] data = getImageData(frame);
-						
-						outputStream.write(data);
-						System.out.println(arrayValue(data));
-						
-						long postImage = System.currentTimeMillis();
-						long waitTime = deltaFramerate - (postImage - preImage);
-						
-						if(waitTime < 0) {
-							Logger.warning(String.format("(%s) Thread is behind %dms", ip, Math.abs(waitTime)));
-						} else {
-							Thread.sleep(waitTime);
-						}
-					}
-				} catch (IOException e) {
-					Logger.info(String.format("Connection from %s closed", ip));
-				} catch (InterruptedException | UninitializedException e) {
+					future.channel().closeFuture().sync();
+				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
-			});
+				
+				workerGroup.shutdownGracefully();
+			}).start();
+		} catch(Exception e) {
+			workerGroup.shutdownGracefully();
+			throw new IOException(e.getMessage());
 		}
-	}
-	
-	public byte[] getImageData(BufferedImage image) throws IOException {
-		ByteArrayOutputStream bos = new ByteArrayOutputStream();
-		ImageIO.write(image, "png", bos);
-		return bos.toByteArray();
-	}
-	
-	public ServerSocket getServerSocket() {
-		return serverSocket;
-	}
-	
-	private long arrayValue(byte[] bs) {
-		long sum = 0;
-		for(byte b : bs) {
-			sum += b;
-		}
-		return sum;
 	}
 	
 }

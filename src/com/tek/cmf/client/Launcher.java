@@ -1,7 +1,6 @@
 package com.tek.cmf.client;
 
 import java.io.IOException;
-import java.net.UnknownHostException;
 
 import com.tek.cmf.logging.Logger;
 
@@ -25,10 +24,9 @@ public class Launcher {
 		try {
 			Client client = new Client();
 			client.start(host, port);
-		} catch (UnknownHostException e) {
-			Logger.error(String.format("Unknown host %s", host));
-		} catch (IOException e) {
-			Logger.error("Error while starting client");
+			Logger.info(String.format("Connected to host %s on port %d", host, port));
+		} catch (IOException | InterruptedException e) {
+			Logger.error("Couldn't connect to server");
 		}
 	}
 	

@@ -1,5 +1,6 @@
 package com.tek.cmf.capture;
 
+import java.awt.Dimension;
 import java.awt.image.BufferedImage;
 
 import com.github.sarxos.webcam.Webcam;
@@ -8,7 +9,8 @@ import com.tek.cmf.exceptions.UninitializedException;
 
 public class Camera {
 	
-	private final static int FRAMERATE = 30;
+	private final static int FRAMERATE = 24;
+	private final static int OPTIMAL_MAX_WIDTH = 500;
 	
 	private static Webcam webcam;
 	private static BufferedImage lastCapture;
@@ -16,8 +18,20 @@ public class Camera {
 	
 	public static void initialize() throws NoWebcamException {
 		webcam = Webcam.getDefault();
+		webcam.setViewSize(getOptimalViewSize(webcam.getViewSizes()));
 		if(webcam == null) throw new NoWebcamException();
 		webcam.open();
+	}
+	
+	private static Dimension getOptimalViewSize(Dimension[] dimensions) {
+		Dimension goodDimension = null;
+		
+		for(Dimension dimension : dimensions) {
+			if(dimension.getWidth() > OPTIMAL_MAX_WIDTH) break;
+			goodDimension = dimension;
+		}
+		
+		return goodDimension;
 	}
 	
 	public static BufferedImage captureImage() throws UninitializedException {
@@ -36,6 +50,11 @@ public class Camera {
 	public static void uninitialize() throws UninitializedException {
 		if(webcam == null) throw new UninitializedException("Webcam");
 		webcam.close();
+	}
+	
+	public static Dimension getDimensions() throws UninitializedException {
+		if(webcam == null) throw new UninitializedException("Webcam");
+		return webcam.getViewSize();
 	}
 	
 	public static int getFramerate() {

@@ -24,11 +24,15 @@ public class Launcher {
 		
 		try {
 			Camera.initialize();
-			Logger.info(String.format("Initialized webcam %s", Camera.getDevice()));
+			Logger.info(String.format("Opened webcam %s", Camera.getDevice()));
 			
 			Server server = new Server();
 			server.start(port);
-		} catch (IOException e) {
+			Logger.info(String.format("Bound server to port %d", port));
+			
+			new Thread(new ImageLoop()).start();
+			Logger.info("Started the ImageLoop");
+		} catch (IOException | InterruptedException e) {
 			Logger.error("Error while starting server");
 		} catch (NoWebcamException e) {
 			Logger.error("No webcam found");
